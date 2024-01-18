@@ -141,13 +141,10 @@ function main() {
 		existing = [];
 		localStorage.setItem("openWindows", JSON.stringify(existing));
 		setTimeout(() => {
-			// existing.push(id);
-			// localStorage.setItem("openWindows", JSON.stringify(existing));
 			console.log("Requesting sync frame");
 			window.localStorage.setItem("syncFrameRequested", "true");
 			setTimeout(() => {
 				if (!syncFrameArrived && existing.length == 0) {
-					// I'll just assume I'm important and play it anyway
 					console.log("I'll just assume I'm important and play it anyway");
 					existing = [id];
 					localStorage.setItem("openWindows", JSON.stringify(existing));
