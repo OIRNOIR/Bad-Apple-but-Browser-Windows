@@ -29,7 +29,7 @@ function obtainUserInteraction (callback) {
 	document.addEventListener('click', onClick);
 }
 /**
- * @type {HTMLElement}
+ * @type {HTMLVideoElement}
  */
 let player;
 
@@ -62,8 +62,10 @@ function pauseFromEvent() {
 
 function main() {
 	existing = JSON.parse(localStorage.getItem("openWindows") ?? "[]");
-	console.log(existing);
-	if (existing == null || existing.length == 0) isImportantWindow = true;
+	if (existing == null || existing.length == 0) {
+		isImportantWindow = true;
+		console.log("This window is the important window.");
+	}
 	if (existing == null) existing = [];
 	const id = existing.length == 0 ? 0 : existing[existing.length - 1] + 1;
 	existing.push(id);
@@ -83,15 +85,37 @@ function main() {
 	});
 	player.addEventListener('pause', () => {
 		player.currentTime = Number(localStorage.getItem("seek"));
-	})
+	});
+	player.addEventListener('ended', () => {
+		player.currentTime = 0;
+		pausePlayer();
+	});
 	window.addEventListener('resize', () => {
 		updatePosition();
 	});
 	setInterval(() => {
 		updatePosition();
-	}, 100);
+	}, 30);
+
+	setInterval(() => {
+		if (isImportantWindow) {
+			if (!player.paused) {
+				localStorage.setItem("autoSyncSeekDate", Date.now());
+				localStorage.setItem("autoSyncSeek", player.currentTime);
+				if (localStorage.getItem("playing") == "false") {
+					player.pause();
+				}
+			} else {
+				if (localStorage.getItem("playing") == "true") {
+					player.play();
+				}
+			}
+		}
+	}, 1000);
 
 	let syncFrameArrived = false;
+
+	let outOfSync = 0;
 
 	const storageUpdate = (event) => {
 		if (event.key == "openWindows") {
@@ -100,15 +124,27 @@ function main() {
 			if (!newExisting || newExisting?.indexOf(id) == -1) {
 				setTimeout(() => {
 					existing = JSON.parse(localStorage.getItem("openWindows") ?? "[]");
-					existing.push(id);
-					localStorage.setItem("openWindows", JSON.stringify(existing));
-					if (existing.indexOf(id) == 0) isImportantWindow = true;
-					else isImportantWindow = false;
+					if (!existing || existing?.indexOf(id) == -1) {
+						existing.push(id);
+						localStorage.setItem("openWindows", JSON.stringify(existing));
+					}
+					if (existing.indexOf(id) == 0) {
+						if (!isImportantWindow) console.log("This window is the important window.");
+						isImportantWindow = true;
+					} else {
+						if (isImportantWindow) console.log("This window is no longer the important window.");
+						isImportantWindow = false;
+					}
 				}, 5 * id);
 			} else {
 				existing = newExisting;
-				if (existing.indexOf(id) == 0) isImportantWindow = true;
-				else isImportantWindow = false;
+				if (existing.indexOf(id) == 0) {
+					if (!isImportantWindow) console.log("This window is the important window.");
+					isImportantWindow = true;
+				} else {
+					if (isImportantWindow) console.log("This window is no longer the important window.");
+					isImportantWindow = false;
+				}
 			}
 		} else if (event.key == "playing") {
 			syncFrameArrived = true;
@@ -122,11 +158,26 @@ function main() {
 		} else if (event.key == "syncFrameRequested") {
 			if (isImportantWindow && event.newValue == "true") {
 				window.localStorage.setItem("syncFrameRequested", "false");
+				console.log("Sync Frame");
 				pausePlayer();
 				setTimeout(() => {
 					playPlayer();
-				}, 100);
+				}, 300);
 			}
+		} else if (event.key == "autoSyncSeek") {
+			setTimeout(() => {
+				if (isImportantWindow) return;
+				const difference = player.currentTime - (Number(event.newValue) + 1);
+				if (Math.abs(difference) > 0.02) {
+					outOfSync++;
+				} else {
+					outOfSync = 0;
+				}
+				if (outOfSync > 5) {
+					window.localStorage.setItem("syncFrameRequested", "true");
+					outOfSync = 0;
+				}
+			}, (Number(localStorage.getItem("autoSyncSeekDate")) + 1000) - Date.now());
 		}
 	};
 
@@ -149,6 +200,7 @@ function main() {
 					existing = [id];
 					localStorage.setItem("openWindows", JSON.stringify(existing));
 					localStorage.setItem("syncFrameRequested", "false");
+					if (!isImportantWindow) console.log("This window is the important window.");
 					isImportantWindow = true;
 					playPlayer();
 				}
@@ -168,6 +220,8 @@ function main() {
 			window.localStorage.removeItem("seekDate");
 			window.localStorage.removeItem("playing");
 			window.localStorage.removeItem("syncFrameRequested");
+			window.localStorage.removeItem("autoSyncSeek");
+			window.localStorage.removeItem("autoSyncSeekDate");
 		}
 	});
 
